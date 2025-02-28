@@ -454,13 +454,15 @@ mod tests {
 	use tracing_test::traced_test;
 
 	use crate::{
-		all_different_int,
-		constraints::int_all_different::{IntAllDifferentBounds, IntAllDifferentValue},
+		constraints::{
+			int_all_different::{IntAllDifferentBounds, IntAllDifferentValue},
+			int_linear::IntLinearLessEqBounds,
+		},
 		solver::{
 			int_var::{EncodingType, IntVar},
 			IntView, SolveResult, Solver,
 		},
-		IntVal, Model,
+		IntVal, NonZeroIntVal,
 	};
 
 	#[test]
@@ -834,12 +836,29 @@ mod tests {
 	#[test]
 	#[traced_test]
 	fn test_all_different_bounds_unsat() {
-		let mut prb = Model::default();
-		let a = prb.new_int_var((1..=3).into());
-		let b = prb.new_int_var((1..=3).into());
-		let c = prb.new_int_var((1..=3).into());
-		prb += all_different_int(vec![a, b, c]);
-		prb += (a + b + c).geq(8);
-		prb.assert_unsatisfiable()
+		// let mut prb = Model::default();
+		let mut slv = Solver::<PropagatingCadical<_>>::from(&Cnf::default());
+		let a = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([1..=3]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let b = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([1..=3]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let c = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([1..=3]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		IntAllDifferentBounds::new_in(&mut slv, vec![a, b, c]);
+
+		IntLinearLessEqBounds::new_in(&mut slv, -a - b - c, -8);
+		slv.assert_unsatisfiable()
 	}
 }
