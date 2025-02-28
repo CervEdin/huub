@@ -51,6 +51,7 @@ use crate::{
 		int_all_different::IntAllDifferent,
 		int_array_element::{IntDecisionArrayElement, IntValArrayElement},
 		int_array_minimum::IntArrayMinimum,
+		int_diffn::IntDiffn,
 		int_div::IntDiv,
 		int_in_set::IntInSetReif,
 		int_linear::{IntLinear, LinOperator},
@@ -237,6 +238,13 @@ where
 	IntAllDifferent {
 		vars: vars.into_iter().map_into().collect(),
 	}
+}
+
+pub fn diffn_int<Iter>(
+	box_posn: Vec<Vec<IntDecision>>,
+	box_size: Vec<Vec<IntDecision>>,
+) -> IntDiffn {
+	IntDiffn { box_posn, box_size }
 }
 
 /// Create a constraint that enforces that a result decision variable takes the
@@ -833,6 +841,7 @@ impl Model {
 
 		let status = match &mut con_obj {
 			ConstraintStore::IntAllDifferent(c) => c.simplify(self),
+			ConstraintStore::IntDiffn(c) => c.simplify(self),
 			ConstraintStore::IntValArrayElement(c) => c.simplify(self),
 			ConstraintStore::IntArrayMinimum(c) => c.simplify(self),
 			ConstraintStore::BoolDecisionArrayElement(c) => c.simplify(self),
@@ -892,6 +901,9 @@ impl Model {
 		match &con_store {
 			ConstraintStore::IntAllDifferent(con) => {
 				<IntAllDifferent as Constraint<Model>>::initialize(con, &mut ctx);
+			}
+			ConstraintStore::IntDiffn(con) => {
+				<IntDiffn as Constraint<Model>>::initialize(con, &mut ctx);
 			}
 			ConstraintStore::IntValArrayElement(con) => {
 				<IntValArrayElement as Constraint<Model>>::initialize(con, &mut ctx);
@@ -1093,6 +1105,12 @@ impl AddAssign<IntAbs> for Model {
 impl AddAssign<IntAllDifferent> for Model {
 	fn add_assign(&mut self, constraint: IntAllDifferent) {
 		self.add_constraint(ConstraintStore::IntAllDifferent(constraint));
+	}
+}
+
+impl AddAssign<IntDiffn> for Model {
+	fn add_assign(&mut self, constraint: IntDiffn) {
+		self.add_constraint(ConstraintStore::IntDiffn(constraint));
 	}
 }
 
