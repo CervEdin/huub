@@ -33,11 +33,23 @@ pub struct IntDiffnSweep {
 }
 
 impl<S: SimplificationActions> Constraint<S> for IntDiffn {
-	fn simplify(&mut self, actions: &mut S) -> Result<SimplificationStatus, ReformulationError> {
+	fn simplify(&mut self, _actions: &mut S) -> Result<SimplificationStatus, ReformulationError> {
 		Ok(SimplificationStatus::Fixpoint)
 	}
 
 	fn to_solver(&self, slv: &mut dyn ReformulationActions) -> Result<(), ReformulationError> {
+		let box_pos: Vec<Vec<_>> = self
+			.box_posn
+			.iter()
+			.map(|row| row.iter().map(|v| slv.get_solver_int(*v)).collect())
+			.collect();
+
+		let box_size: Vec<Vec<_>> = self
+			.box_size
+			.iter()
+			.map(|row| row.iter().map(|v| slv.get_solver_int(*v)).collect())
+			.collect();
+		IntDiffnSweep::new_in(slv, box_pos, box_size);
 		Ok(())
 	}
 }
@@ -101,7 +113,7 @@ impl IntDiffnSweep {
 			sweep.push(actions.get_int_lower_bound(self.box_posn[curr_obj_idx][i]));
 			jump.push(actions.get_int_upper_bound(self.box_posn[curr_obj_idx][i]) + 1);
 		}
-		let mut infeasible_fr = infeasible_sweep(&sweep, self.dimensions, all_fr);
+		let mut infeasible_fr = Self::infeasible_sweep(&sweep, self.dimensions, all_fr);
 		while b && infeasible_fr.is_some() {
 			jump[curr_dimension] = cmp::min(
 				jump[curr_dimension],
@@ -116,12 +128,12 @@ impl IntDiffnSweep {
 				curr_dimension,
 				self.dimensions,
 			);
-			infeasible_fr = infeasible_sweep(&sweep, self.dimensions, all_fr);
+			infeasible_fr = Self::infeasible_sweep(&sweep, self.dimensions, all_fr);
 		}
 
-		// if b {
-		//     //DO THE PRUNING
-		// }
+		if b {
+			//DO THE PRUNING
+		}
 		Ok(())
 	}
 	fn prune_max<P: PropagationActions>(
@@ -139,7 +151,7 @@ impl IntDiffnSweep {
 			sweep.push(actions.get_int_upper_bound(self.box_posn[curr_obj_idx][i]));
 			jump.push(actions.get_int_lower_bound(self.box_posn[curr_obj_idx][i]) - 1);
 		}
-		let mut infeasible_fr = infeasible_sweep(&sweep, self.dimensions, all_fr);
+		let mut infeasible_fr = Self::infeasible_sweep(&sweep, self.dimensions, all_fr);
 		while b && infeasible_fr.is_some() {
 			jump[curr_dimension] = cmp::max(
 				jump[curr_dimension],
@@ -154,7 +166,7 @@ impl IntDiffnSweep {
 				curr_dimension,
 				self.dimensions,
 			);
-			infeasible_fr = infeasible_sweep(&sweep, self.dimensions, all_fr);
+			infeasible_fr = Self::infeasible_sweep(&sweep, self.dimensions, all_fr);
 		}
 
 		// if b {
@@ -214,31 +226,23 @@ impl IntDiffnSweep {
 		fr: &ForbiddenRegion,
 		dimensions: usize,
 	) -> bool {
+		println!("size: {:?}", fr.lb.len());
 		!(0..dimensions).any(|d| {
 			actions.get_int_upper_bound(curr_obj_pos[d]) < fr.lb[d]
 				|| actions.get_int_lower_bound(curr_obj_pos[d]) > fr.ub[d]
 		})
-		//
-		// for d in 0..dimensions {
-		//     let no_overlap = actions.get_int_upper_bound(curr_obj_pos[d]) < fr.lb[d] ||
-		//         actions.get_int_lower_bound(curr_obj_pos[d]) > fr.ub[d];
-		//     if no_overlap {
-		//         return false;
-		//     }
-		// }
-		// true
 	}
 
 	/// Generates forbidden regions given object o
 	fn generate_fr<P: PropagationActions>(
 		&self,
 		actions: &mut P,
-		o_idx: usize, //TODO: maybe send the whole objects rather than just the idx
+		o_idx: usize,
 		dimensions: usize,
 	) -> Option<Vec<ForbiddenRegion>> {
 		let mut all_fr: Vec<ForbiddenRegion> = vec![];
 		let no_objects = self.box_posn.len();
-		let curr_obj_size = &self.box_size[o_idx]; // get the address &?
+		let curr_obj_size = &self.box_size[o_idx];
 		for i in 0..no_objects {
 			let mut fr = ForbiddenRegion {
 				lb: Vec::new(),
@@ -268,6 +272,7 @@ impl IntDiffnSweep {
 			let is_overlapping =
 				Self::overlaps::<P>(actions, &self.box_posn[o_idx], &fr, dimensions);
 
+			println!("HERE");
 			if fr.lb.len() == dimensions && is_overlapping {
 				all_fr.push(fr);
 			}
@@ -278,20 +283,20 @@ impl IntDiffnSweep {
 			Some(all_fr)
 		}
 	}
-}
 
-// Checks whether the sweep point is in a feasible position
-fn infeasible_sweep<'a>(
-	sweep: &Vec<IntVal>,
-	dimensions: usize,
-	all_fr: &'a Vec<ForbiddenRegion>,
-) -> Option<&'a ForbiddenRegion> {
-	all_fr
-		.iter()
-		.filter(|fr|
+	// Checks whether the sweep point is in a feasible position, if it is feas
+	fn infeasible_sweep<'a>(
+		sweep: &Vec<IntVal>,
+		dimensions: usize,
+		all_fr: &'a Vec<ForbiddenRegion>,
+	) -> Option<&'a ForbiddenRegion> {
+		all_fr
+			.iter()
+			.filter(|fr|
                     // TODO: Check if this is correect
-                    (1..dimensions).any(|i| sweep[i] < fr.lb[i] || sweep[i] > fr.ub[i]))
-		.next()
+                    (0..dimensions).any(|i| sweep[i] < fr.lb[i] || sweep[i] > fr.ub[i]))
+			.next()
+	}
 }
 
 impl<P, E> Propagator<P, E> for IntDiffnSweep
@@ -311,5 +316,83 @@ where
 			}
 		}
 		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use pindakaas::{solver::cadical::PropagatingCadical, Cnf};
+	use rangelist::RangeList;
+	use tracing_test::traced_test;
+
+	use crate::{
+		constraints::int_diffn::IntDiffnSweep,
+		solver::{
+			int_var::{EncodingType, IntVar},
+			Solver,
+		},
+	};
+
+	#[test]
+	#[traced_test]
+	fn test_diffn() {
+		let mut slv = Solver::<PropagatingCadical<_>>::from(&Cnf::default());
+		let pos_1 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([0..=5]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let pos_2 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([0..=3]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let pos_3 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([1..=3]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let pos_4 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([4..=4]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+
+		let size_1 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([4..=4]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let size_2 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([3..=3]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let size_3 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([2..=2]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+		let size_4 = IntVar::new_in(
+			&mut slv,
+			RangeList::from_iter([2..=2]),
+			EncodingType::Eager,
+			EncodingType::Eager,
+		);
+
+		IntDiffnSweep::new_in(
+			&mut slv,
+			vec![vec![pos_1, pos_2], vec![pos_3, pos_4]],
+			vec![vec![size_1, size_2], vec![size_3, size_4]],
+		);
+
+		slv.assert_unsatisfiable();
 	}
 }
