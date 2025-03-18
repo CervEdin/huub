@@ -246,19 +246,19 @@ where
 	Iter: IntoIterator,
 	Iter::Item: Into<IntDecision>,
 {
-	let box_posn_dec = box_posn
+	let box_posn_d = box_posn
 		.into_iter()
 		.map(|row| row.into_iter().map_into().collect())
 		.collect();
 
-	let box_size_dec = box_size
+	let box_size_d = box_size
 		.into_iter()
 		.map(|row| row.into_iter().map_into().collect())
 		.collect();
 
 	IntDiffn {
-		box_posn: box_posn_dec,
-		box_size: box_size_dec,
+		box_posn: box_posn_d,
+		box_size: box_size_d,
 	}
 }
 
