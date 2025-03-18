@@ -1,3 +1,6 @@
+//! Structure and algorithms for the integer diffn constraint, which
+//! enforces that a number of k-dimensional hyperrectangles do not overlap.
+
 use std::cmp;
 
 use itertools::izip;
