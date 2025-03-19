@@ -115,7 +115,7 @@ impl IntDiffnSweep {
 		curr_obj_idx: usize,
 		curr_dimension: usize,
 		all_fr: &Vec<ForbiddenRegion>,
-	) -> Result<(), Conflict> {
+	) -> Result<bool, Conflict> {
 		let mut sweep = vec![];
 		let mut jump = vec![];
 		let mut b = true;
@@ -164,8 +164,9 @@ impl IntDiffnSweep {
 				reason,
 			)?;
 			// println!("Setting ub of object {} to {:?} in dimension {}",curr_obj_idx, sweep[curr_dimension], curr_dimension);
+			return Ok(b);
 		}
-		Ok(())
+		Ok(b)
 	}
 
 	fn prune_max<P: PropagationActions>(
@@ -175,7 +176,7 @@ impl IntDiffnSweep {
 		curr_obj_idx: usize,
 		curr_dimension: usize,
 		all_fr: &Vec<ForbiddenRegion>,
-	) -> Result<(), Conflict> {
+	) -> Result<bool, Conflict> {
 		let mut sweep = vec![];
 		let mut jump = vec![];
 		let mut b = true;
@@ -227,8 +228,9 @@ impl IntDiffnSweep {
 				reason,
 			)?;
 			// println!("Setting ub of object {} to {:?} in dimension {}",curr_obj_idx, sweep[curr_dimension], curr_dimension);
+			return Ok(b);
 		}
-		Ok(())
+		Ok(b)
 	}
 
 	fn adjust_sweep_min<P: PropagationActions>(
@@ -342,7 +344,7 @@ impl IntDiffnSweep {
 					Self::overlaps::<P>(actions, &self.box_posn[o_idx], &fr, dimensions);
 
 				if is_overlapping {
-					fr_support.push(o_idx);
+					fr_support.push(i);
 					all_fr.push(fr);
 				} else {
 				}
@@ -376,7 +378,7 @@ where
 	fn propagate(&mut self, actions: &mut P) -> Result<(), Conflict> {
 		for o_idx in 0..self.box_posn.len() {
 			// println!("MAIN OBJECT IS NOW {:?}", o_idx);
-
+			//
 			// ONLY DEBUGGING PURPOSES
 			// for o in 0..self.box_posn.len() {
 			// println!("object {:?}: x - ub: {:?} lb: {:?} y - ub: {:?}, lb: {:?} ",
@@ -390,6 +392,27 @@ where
 			let mut fr_support: Vec<usize> = Vec::new();
 			if let Some(all_fr) = self.generate_fr(actions, &mut fr_support, o_idx, self.dimensions)
 			{
+				let mut assigned = true;
+				for d in 0..self.dimensions {
+					let fixed = actions.get_int_val(self.box_posn[o_idx][d]);
+					if fixed.is_none() {
+						assigned = false;
+					}
+				}
+				if assigned {
+					let mut reason: Vec<_> = Vec::new();
+					for i in fr_support {
+						for d in 0..self.dimensions {
+							reason.push(actions.get_int_upper_bound_lit(self.box_posn[i][d]));
+							reason.push(actions.get_int_lower_bound_lit(self.box_posn[i][d]));
+						}
+					}
+					for d in 0..self.dimensions {
+						reason.push(actions.get_int_upper_bound_lit(self.box_posn[o_idx][d]));
+						reason.push(actions.get_int_lower_bound_lit(self.box_posn[o_idx][d]));
+					}
+					return Err(Conflict::new(actions, None, reason));
+				}
 				// for f in 0..all_fr.len() {
 				//println!("FORBIDDEN REGION: x - ub: {:?} lb: {:?} y - ub: {:?}, lb: {:?} ",
 				//         all_fr[f].ub[0],
@@ -399,8 +422,39 @@ where
 				//);
 				// }
 				for d in 0..self.dimensions {
-					self.prune_min(actions, &fr_support, o_idx, d, &all_fr)?;
-					self.prune_max(actions, &fr_support, o_idx, d, &all_fr)?;
+					let fixed = actions.get_int_val(self.box_posn[o_idx][d]);
+					if fixed.is_none()
+						&& !self.prune_min(actions, &fr_support, o_idx, d, &all_fr)?
+					{
+						let mut reason: Vec<_> = Vec::new();
+						for i in fr_support {
+							for d in 0..self.dimensions {
+								reason.push(actions.get_int_upper_bound_lit(self.box_posn[i][d]));
+								reason.push(actions.get_int_lower_bound_lit(self.box_posn[i][d]));
+							}
+						}
+						for d in 0..self.dimensions {
+							reason.push(actions.get_int_upper_bound_lit(self.box_posn[o_idx][d]));
+							reason.push(actions.get_int_lower_bound_lit(self.box_posn[o_idx][d]));
+						}
+						return Err(Conflict::new(actions, None, reason));
+					}
+					if fixed.is_none()
+						&& !self.prune_max(actions, &fr_support, o_idx, d, &all_fr)?
+					{
+						let mut reason: Vec<_> = Vec::new();
+						for i in fr_support {
+							for d in 0..self.dimensions {
+								reason.push(actions.get_int_upper_bound_lit(self.box_posn[i][d]));
+								reason.push(actions.get_int_lower_bound_lit(self.box_posn[i][d]));
+							}
+						}
+						for d in 0..self.dimensions {
+							reason.push(actions.get_int_upper_bound_lit(self.box_posn[o_idx][d]));
+							reason.push(actions.get_int_lower_bound_lit(self.box_posn[o_idx][d]));
+						}
+						return Err(Conflict::new(actions, None, reason));
+					}
 				}
 			}
 		}
