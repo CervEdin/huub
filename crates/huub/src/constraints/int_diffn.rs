@@ -138,7 +138,7 @@ impl IntDiffnSweep {
 					reason.push(actions.get_int_lower_bound_lit(self.box_posn[o_idx][d]));
 				}
 			}
-			for d in (0..self.dimensions).filter(|&x| x == curr_dimension) {
+			for d in 0..self.dimensions {
 				reason.push(actions.get_int_upper_bound_lit(self.box_posn[curr_obj_idx][d]));
 				reason.push(actions.get_int_lower_bound_lit(self.box_posn[curr_obj_idx][d]));
 			}
@@ -202,7 +202,7 @@ impl IntDiffnSweep {
 					reason.push(actions.get_int_lower_bound_lit(self.box_posn[o_idx][d]));
 				}
 			}
-			for d in (0..self.dimensions).filter(|&x| x == curr_dimension) {
+			for d in 0..self.dimensions {
 				reason.push(actions.get_int_upper_bound_lit(self.box_posn[curr_obj_idx][d]));
 				reason.push(actions.get_int_lower_bound_lit(self.box_posn[curr_obj_idx][d]));
 			}
