@@ -42,7 +42,7 @@ use crate::{
 		activation_list::IntPropCond,
 		engine::{trace_new_lit, Engine, PropRef, SearchStatistics},
 		int_var::{DirectStorage, IntVarRef, LazyLitDef, OrderStorage},
-		queue::PriorityLevel,
+		queue::{PriorityLevel, PropagatorInfo},
 		trail::TrailedInt,
 	},
 	Clause, IntVal, LinearTransform, Model, NonZeroIntVal, ReformulationError,
@@ -240,9 +240,38 @@ impl BoolView {
 	}
 }
 
+impl Add<IntVal> for BoolView {
+	type Output = IntView;
+
+	fn add(self, rhs: IntVal) -> Self::Output {
+		match self.0 {
+			BoolViewInner::Lit(lit) => IntView(IntViewInner::Bool {
+				transformer: LinearTransform::offset(rhs),
+				lit,
+			}),
+			BoolViewInner::Const(b) => (b as IntVal + rhs).into(),
+		}
+	}
+}
+
 impl From<bool> for BoolView {
 	fn from(value: bool) -> Self {
 		BoolView(BoolViewInner::Const(value))
+	}
+}
+
+impl Mul<IntVal> for BoolView {
+	type Output = IntView;
+
+	fn mul(self, rhs: IntVal) -> Self::Output {
+		match self.0 {
+			_ if rhs == 0 => IntView(IntViewInner::Const(0)),
+			BoolViewInner::Lit(lit) => IntView(IntViewInner::Bool {
+				transformer: LinearTransform::scaled(NonZeroIntVal::new(rhs).unwrap()),
+				lit,
+			}),
+			BoolViewInner::Const(b) => (b as IntVal * rhs).into(),
+		}
 	}
 }
 
@@ -435,6 +464,7 @@ impl Mul<NonZeroIntVal> for IntView {
 
 	fn mul(self, rhs: NonZeroIntVal) -> Self::Output {
 		Self(match self.0 {
+			x if rhs.get() == 1 => x,
 			IntViewInner::VarRef(iv) => IntViewInner::Linear {
 				transformer: LinearTransform::scaled(rhs),
 				var: iv,
@@ -979,21 +1009,17 @@ impl<Oracle: PropagatingSolver<Engine>> PropagatorInitActions for Solver<Oracle>
 	fn add_propagator(&mut self, propagator: BoxedPropagator, priority: PriorityLevel) -> PropRef {
 		let engine = self.engine_mut();
 		let prop_ref = engine.propagators.push(propagator);
-		let p = engine.state.propagator_priority.push(priority);
-		debug_assert_eq!(prop_ref, p);
-		let p = self.engine_mut().state.enqueued.push(false);
+		let p = engine.state.propagator_queue.info.push(PropagatorInfo {
+			enqueued: false,
+			priority,
+		});
 		debug_assert_eq!(prop_ref, p);
 		p
 	}
 
 	fn enqueue_now(&mut self, prop: PropRef) {
 		let state = &mut self.engine_mut().state;
-		if !state.enqueued[prop] {
-			state
-				.propagator_queue
-				.insert(state.propagator_priority[prop], prop);
-			state.enqueued[prop] = true;
-		}
+		state.propagator_queue.enqueue_propagator(prop);
 	}
 
 	fn enqueue_on_bool_change(&mut self, prop: PropRef, var: BoolView) {
