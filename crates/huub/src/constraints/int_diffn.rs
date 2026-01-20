@@ -342,7 +342,7 @@ impl<const STRICT: bool, I1, I2> IntDiffnSweep<STRICT, I1, I2> {
 			if forbidden.overlaps(lb, ub) {
 				for tup in &mut forbidden_regions {
 					if let Some((f, _)) = tup {
-						match f.coalensce(&forbidden) {
+						match f.coalesce(&forbidden) {
 							// `forbidden` is a subset of an existing region `f`, so we can ignore
 							// it.
 							Some(Ordering::Equal) | Some(Ordering::Greater) => {
@@ -753,7 +753,7 @@ impl Region {
 	/// - `None`: The regions cannot be coalesced because they are disjoint,
 	///   partially overlapping, or touching in a way that doesn't form a subset
 	///   relationship across all dimensions.
-	fn coalensce(&self, other: &Self) -> Option<Ordering> {
+	fn coalesce(&self, other: &Self) -> Option<Ordering> {
 		debug_assert_eq!(self.0.len(), other.0.len());
 
 		let mut trend = Ordering::Equal;
